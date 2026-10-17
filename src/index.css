@@ -135,11 +135,13 @@ body {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #fff;
+  color: #4ade80;
+  text-shadow: 0 0 10px rgba(74, 222, 128, 0.35);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
+
 
 .badge-version {
   font-size: 0.65rem;
