@@ -1,8 +1,24 @@
-# Backups e temporários locais
-.ag-kit-backups/
+# Logs
+logs
 *.log
-.env
-.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Configurações com credenciais sensíveis (caso queira manter local apenas)
-# .agents/mcp_config.json
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
