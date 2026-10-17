@@ -1,0 +1,8 @@
+# Backups e temporários locais
+.ag-kit-backups/
+*.log
+.env
+.env.local
+
+# Configurações com credenciais sensíveis (caso queira manter local apenas)
+# .agents/mcp_config.json

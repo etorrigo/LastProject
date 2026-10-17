@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECU Telemetry & Diagnostic Scanner - HMI Dashboard</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            void: '#0B0F17',
+            surface: {
+              DEFAULT: '#0F172A',
+              elevated: '#1E293B',
+              subtle: '#111827',
+              border: '#334155'
+            },
+            status: {
+              optimal: '#10B981',
+              warning: '#F59E0B',
+              critical: '#EF4444',
+              cyan: '#06B6D4'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* Estilos industriais refinados e micro-animações */
+    body {
+      background-color: #0B0F17;
+      background-image: radial-gradient(rgba(51, 65, 85, 0.15) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    .tnum {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .glass-card {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    }
+
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+
+    .glow-green {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+    }
+
+    .pulse-danger {
+      animation: dangerPulse 1.2s infinite ease-in-out;
+    }
+
+    @keyframes dangerPulse {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.6); box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+      50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
+    }
+
+    /* Scrollbar personalizada industrial */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0B0F17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="text-slate-200 font-sans min-h-screen flex flex-col antialiased selection:bg-cyan-500/20 selection:text-cyan-300">
+
+  <!-- ================= TOP HEADER FIXO ================= -->
+  <header class="sticky top-0 z-50 bg-[#0F172A]/90 backdrop-blur-md border-b border-surface-border px-4 lg:px-6 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & HMI ID -->
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-mono font-bold text-lg shadow-inner">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-slate-100 tracking-wide text-sm sm:text-base">ECU CALIBRATION HMI</h1>
+            <span class="text-[10px] font-mono uppercase bg-slate-800 text-cyan-400 border border-slate-700 px-1.5 py-0.5 rounded">v2.4-BT</span>
+          </div>
+          <p class="text-xs text-slate-400 font-mono">PROTOCOLO: ISO 15765-4 (CAN 500K/11b)</p>
+        </div>
+      </div>
+
+      <!-- Live Vitals Top Bar -->
+      <div class="flex items-center gap-4 sm:gap-6">
+        <!-- Tensão da Bateria -->
+        <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded">
+          <span class="text-slate-400 text-xs uppercase font-mono">BATERIA:</span>
+          <span id="ecu-voltage" class="font-mono font-bold text-emerald-400 text-sm tnum">13.8V</span>
+        </div>
+
+        <!-- Latência do Link -->
+        <div class="hidden md:flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded">
+          <span class="text-slate-400 text-xs uppercase font-mono">TX/RX:</span>
+          <span id="link-latency" class="font-mono font-bold text-slate-300 text-sm tnum">14ms</span>
+        </div>
+
+        <!-- Botão Conectar OBD/ECU com Indicador Pulsante -->
+        <button id="btn-bluetooth" onclick="toggleConnection()" class="flex items-center gap-2.5 px-4 py-2 rounded font-mono text-xs font-semibold tracking-wider uppercase transition-all duration-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200">
+          <span id="bt-indicator" class="relative flex h-2.5 w-2.5">
+            <span id="bt-ping" class="hidden absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="bt-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+          </span>
+          <span id="bt-label">CONECTAR OBD/ECU</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= CONTAINER PRINCIPAL ================= -->
+  <main class="max-w-7xl mx-auto w-full p-4 lg:p-6 flex-1 flex flex-col gap-6">
+
+    <!-- 1. GRID PRINCIPAL DE TELEMETRIA (4 CARDS) -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span> PARÂMETROS CRÍTICOS EM TEMPO REAL
+        </h2>
+        <span class="text-xs font-mono text-slate-500">FREQ. AMOSTRAGEM: 10 HZ</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <!-- CARD 1: RPM DO MOTOR -->
+        <div id="card-rpm" class="glass-card rounded-lg p-4 flex flex-col justify-between transition-all duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400">ROTAÇÃO MOTOR</span>
+            <span class="text-[10px] font-mono text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">PICO: <span id="peak-rpm" class="text-slate-300">0</span></span>
+          </div>
+          <div class="my-3 flex items-baseline gap-2">
+            <span id="val-rpm" class="text-4xl font-mono font-extrabold text-slate-100 tnum tracking-tight">0</span>
+            <span class="text-xs font-mono font-bold text-slate-400">RPM</span>
+          </div>
+          <!-- Barra de Progresso com Faixas -->
+          <div>
+            <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+              <div id="bar-rpm" class="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-rose-500 transition-all duration-200" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+              <span>0</span>
+              <span>4500</span>
+              <span class="text-rose-400">7500</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: PRESSÃO DO TURBO / MAP -->
+        <div id="card-boost" class="glass-card rounded-lg p-4 flex flex-col justify-between transition-all duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400">PRESSÃO TURBO (MAP)</span>
+            <span class="text-[10px] font-mono text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">TARGET: 1.50</span>
+          </div>
+          <div class="my-3 flex items-baseline gap-2">
+            <span id="val-boost" class="text-4xl font-mono font-extrabold text-cyan-400 tnum tracking-tight">0.00</span>
+            <span class="text-xs font-mono font-bold text-slate-400">BAR</span>
+          </div>
+          <div>
+            <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+              <div id="bar-boost" class="h-full bg-cyan-400 transition-all duration-200" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+              <span>-0.8</span>
+              <span>1.0</span>
+              <span>2.5</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 3: TEMPERATURAS (ÁGUA & ÓLEO) -->
+        <div id="card-temp" class="glass-card rounded-lg p-4 flex flex-col justify-between transition-all duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400">TEMPERATURA ARREF. / ÓLEO</span>
+            <span id="badge-temp-status" class="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded">NOMINAL</span>
+          </div>
+          <div class="my-2 flex items-center justify-between gap-4">
+            <div>
+              <span class="text-[10px] font-mono text-slate-400 block">ECT (ÁGUA)</span>
+              <div class="flex items-baseline gap-1">
+                <span id="val-ect" class="text-3xl font-mono font-extrabold text-emerald-400 tnum">0</span>
+                <span class="text-xs font-mono font-bold text-slate-400">°C</span>
+              </div>
+            </div>
+            <div class="h-8 w-px bg-slate-700"></div>
+            <div>
+              <span class="text-[10px] font-mono text-slate-400 block">EOT (ÓLEO)</span>
+              <div class="flex items-baseline gap-1">
+                <span id="val-eot" class="text-3xl font-mono font-extrabold text-slate-200 tnum">0</span>
+                <span class="text-xs font-mono font-bold text-slate-400">°C</span>
+              </div>
+            </div>
+          </div>
+          <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+            <div id="bar-ect" class="h-full bg-emerald-400 transition-all duration-200" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- CARD 4: LAMBDA & EFICIÊNCIA VOLUMÉTRICA -->
+        <div id="card-lambda" class="glass-card rounded-lg p-4 flex flex-col justify-between transition-all duration-300">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400">LAMBDA / MISTURA (AFR)</span>
+            <span id="badge-afr" class="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">ESTEQUIOMÉTRICO</span>
+          </div>
+          <div class="my-3 flex items-baseline justify-between">
+            <div class="flex items-baseline gap-2">
+              <span id="val-lambda" class="text-4xl font-mono font-extrabold text-slate-100 tnum tracking-tight">1.00</span>
+              <span class="text-xs font-mono font-bold text-slate-400">λ</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] font-mono text-slate-400 block">VE (EFIC. VOL.)</span>
+              <span id="val-ve" class="font-mono font-bold text-cyan-400 text-sm tnum">0%</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+            <span class="text-amber-400">RICO (0.82)</span>
+            <div class="flex-1 bg-slate-900 h-1 rounded-full relative">
+              <div id="lambda-pointer" class="w-2 h-2 rounded-full bg-cyan-400 absolute top-1/2 -translate-y-1/2 transition-all duration-200" style="left: 50%"></div>
+            </div>
+            <span class="text-cyan-400">POBRE (1.10)</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 2. PAINEL INFERIOR: TELA SCANNER DE DIAGNÓSTICO -->
+    <section class="glass-card rounded-lg border border-surface-border p-4 lg:p-5 flex flex-col flex-1">
+      
+      <!-- Cabeçalho do Scanner & Ações Rápidas -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-surface-border">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-sm bg-rose-500/80"></div>
+          <h2 class="font-mono font-bold text-sm tracking-wide text-slate-200 uppercase">
+            SCANNER DE DIAGNÓSTICO DA ECU (DTC RECORDER)
+          </h2>
+          <span id="dtc-counter" class="text-xs font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold ml-2">
+            0 FALHAS
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Botão Scan DTCs -->
+          <button onclick="scanDTCs()" class="flex items-center gap-2 px-3 py-1.5 rounded bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-semibold uppercase tracking-wider transition-all">
+            <svg class="w-3.5 h-3.5 animate-spin hidden" id="scan-spinner" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <span id="btn-scan-text">🔍 INICIAR VARREDURA (SCAN)</span>
+          </button>
+
+          <!-- Botão Limpar Erros -->
+          <button onclick="clearDTCs()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/40 text-rose-300 font-mono text-xs font-semibold uppercase tracking-wider transition-all">
+            🧹 LIMPAR BUFFER (CLEAR)
+          </button>
+
+          <!-- Botão Exportar CSV -->
+          <button onclick="exportLogCSV()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 font-mono text-xs font-semibold uppercase tracking-wider transition-all">
+            📥 EXPORTAR CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabela de Falhas Diagnosticadas (DTC) -->
+      <div class="overflow-x-auto my-3 flex-1">
+        <table class="w-full text-left font-mono text-xs border-collapse">
+          <thead>
+            <tr class="text-slate-400 border-b border-surface-border/60 uppercase text-[11px] bg-slate-900/40">
+              <th class="py-2.5 px-3">HORÁRIO</th>
+              <th class="py-2.5 px-3">CÓDIGO (DTC)</th>
+              <th class="py-2.5 px-3">SUBSISTEMA</th>
+              <th class="py-2.5 px-3">DESCRIÇÃO DA FALHA</th>
+              <th class="py-2.5 px-3">STATUS</th>
+              <th class="py-2.5 px-3 text-right">AÇÃO</th>
+            </tr>
+          </thead>
+          <tbody id="dtc-table-body" class="divide-y divide-slate-800/60">
+            <tr id="row-empty">
+              <td colspan="6" class="text-center py-8 text-slate-500 font-mono italic">
+                Nenhuma falha ativa registrada no buffer da ECU. Conecte o módulo e execute uma varredura.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Terminal de Log do Barramento CAN / OBD2 -->
+      <div class="bg-black/60 rounded border border-slate-800 p-3 mt-auto">
+        <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 mb-1">
+          <span>CONSOLE DE COMUNICAÇÃO CAN-BUS EM TEMPO REAL</span>
+          <span class="text-emerald-500">FEED ATIVO</span>
+        </div>
+        <div id="can-console" class="font-mono text-[11px] text-slate-400 h-20 overflow-y-auto space-y-0.5">
+          <div><span class="text-slate-600">[00:00:00.000]</span> Sistema inicializado. Aguardando link de telemetria OBD2...</div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ================= SCRIPTS JS (LÓGICA E SIMULAÇÃO) ================= -->
+  <script>
+    // ESTADO DO SISTEMA
+    const state = {
+      connected: false,
+      connecting: false,
+      simInterval: null,
+      peakRpm: 0,
+      dtcs: []
+    };
+
+    // BANCO DE DADOS DE DTCs AUTOMOTIVOS PARA SIMULAÇÃO
+    const DTC_DATABASE = [
+      { code: 'P0102', system: 'Admissão (MAF)', desc: 'Sensor de Fluxo de Massa de Ar - Sinal Baixo', severity: 'warning' },
+      { code: 'P0171', system: 'Alimentação', desc: 'Mistura Excessivamente Pobre (Banco 1)', severity: 'warning' },
+      { code: 'P0234', system: 'Sobrealimentação', desc: 'Condição de Sobrepressão do Turbo (Overboost)', severity: 'critical' },
+      { code: 'P0300', system: 'Ignição', desc: 'Falha de Ignição Aleatória/Múltiplos Cilindros', severity: 'critical' },
+      { code: 'P0118', system: 'Arrefecimento', desc: 'Sensor ECT de Temperatura de Água - Tensão Alta', severity: 'warning' },
+      { code: 'P0500', system: 'Velocidade', desc: 'Sensor de Velocidade do Veículo (VSS) - Sem Sinal', severity: 'warning' }
+    ];
+
+    // CONSOLE LOGGER
+    function logCAN(message, colorClass = 'text-slate-400') {
+      const consoleEl = document.getElementById('can-console');
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      const logLine = document.createElement('div');
+      logLine.className = colorClass;
+      logLine.innerHTML = `<span class="text-slate-600">[${timeStr}]</span> ${message}`;
+      consoleEl.appendChild(logLine);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    // ALTERNAR CONEXÃO BLUETOOTH / ECU
+    function toggleConnection() {
+      const btn = document.getElementById('btn-bluetooth');
+      const label = document.getElementById('bt-label');
+      const dot = document.getElementById('bt-dot');
+      const ping = document.getElementById('bt-ping');
+
+      if (state.connected) {
+        // Desconectar
+        state.connected = false;
+        clearInterval(state.simInterval);
+        resetTelemetryUI();
+
+        label.innerText = 'CONECTAR OBD/ECU';
+        btn.className = 'flex items-center gap-2.5 px-4 py-2 rounded font-mono text-xs font-semibold tracking-wider uppercase transition-all duration-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200';
+        dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500';
+        ping.classList.add('hidden');
+        logCAN('Link Bluetooth encerrado pelo operador.', 'text-rose-400');
+        return;
+      }
+
+      if (state.connecting) return;
+
+      // Iniciar Pareamento
+      state.connecting = true;
+      label.innerText = 'PAREANDO OBD...';
+      dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400';
+      ping.classList.remove('hidden');
+      ping.className = 'absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping';
+      logCAN('Iniciando handshake Bluetooth SPP com adaptador ELM327/ECU...', 'text-amber-400');
+
+      setTimeout(() => {
+        state.connecting = false;
+        state.connected = true;
+        label.innerText = 'ECU ONLINE';
+        btn.className = 'flex items-center gap-2.5 px-4 py-2 rounded font-mono text-xs font-semibold tracking-wider uppercase transition-all duration-300 bg-emerald-950/70 hover:bg-emerald-900/60 border border-emerald-500/50 text-emerald-300';
+        dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400';
+        ping.className = 'absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping';
+        
+        logCAN('Handshake CAN OK! Protocolo: ISO 15765-4 CAN 11bit 500k baud.', 'text-emerald-400');
+        logCAN('Fluxo de telemetria em alta frequência habilitado.', 'text-cyan-400');
+
+        // Iniciar simulação contínua
+        startTelemetrySimulation();
+      }, 1600);
+    }
+
+    // RESETAR PAINEL
+    function resetTelemetryUI() {
+      document.getElementById('val-rpm').innerText = '0';
+      document.getElementById('bar-rpm').style.width = '0%';
+      document.getElementById('val-boost').innerText = '0.00';
+      document.getElementById('bar-boost').style.width = '0%';
+      document.getElementById('val-ect').innerText = '0';
+      document.getElementById('val-eot').innerText = '0';
+      document.getElementById('bar-ect').style.width = '0%';
+      document.getElementById('val-lambda').innerText = '1.00';
+      document.getElementById('val-ve').innerText = '0%';
+      document.getElementById('card-rpm').classList.remove('pulse-danger');
+    }
+
+    // SIMULAÇÃO EM TEMPO REAL (TELEMETRIA MOTOR)
+    function startTelemetrySimulation() {
+      if (state.simInterval) clearInterval(state.simInterval);
+
+      // Loop de atualização a cada 1000ms (1 segundo)
+      state.simInterval = setInterval(() => {
+        if (!state.connected) return;
+
+        // 1. Simulação RPM (Flutuações realistas entre 1200rpm marcha lenta e 6800rpm aceleração)
+        const isSpooling = Math.random() > 0.4;
+        let baseRpm = isSpooling ? Math.floor(3500 + Math.random() * 3200) : Math.floor(950 + Math.random() * 600);
+        const rpm = baseRpm;
+        
+        if (rpm > state.peakRpm) {
+          state.peakRpm = rpm;
+          document.getElementById('peak-rpm').innerText = state.peakRpm;
+        }
+
+        const rpmEl = document.getElementById('val-rpm');
+        const rpmBar = document.getElementById('bar-rpm');
+        const cardRpm = document.getElementById('card-rpm');
+        rpmEl.innerText = rpm;
+        
+        const rpmPct = Math.min((rpm / 7500) * 100, 100);
+        rpmBar.style.width = `${rpmPct}%`;
+
+        // Alerta visual de RPM Crítico (Redline > 6400)
+        if (rpm >= 6400) {
+          cardRpm.classList.add('pulse-danger');
+          rpmEl.className = 'text-4xl font-mono font-extrabold text-rose-500 tnum tracking-tight';
+        } else {
+          cardRpm.classList.remove('pulse-danger');
+          rpmEl.className = 'text-4xl font-mono font-extrabold text-slate-100 tnum tracking-tight';
+        }
+
+        // 2. Simulação de Turbo Boost (Bar)
+        let boost = -0.65; // Vácuo padrão
+        if (rpm > 2500) {
+          boost = ((rpm - 2500) / 4000) * 1.55 + (Math.random() * 0.2 - 0.1);
+        }
+        boost = Math.max(-0.8, Math.min(2.1, boost));
+        document.getElementById('val-boost').innerText = boost.toFixed(2);
+        
+        // Mapeamento barra boost (-0.8 a 2.5 bar)
+        const boostPct = Math.max(0, Math.min(100, ((boost + 0.8) / 3.3) * 100));
+        document.getElementById('bar-boost').style.width = `${boostPct}%`;
+
+        // 3. Simulação Temperaturas
+        const ect = Math.floor(91 + Math.random() * 5); // 91 a 95°C
+        const eot = Math.floor(98 + Math.random() * 7); // 98 a 104°C
+        document.getElementById('val-ect').innerText = ect;
+        document.getElementById('val-eot').innerText = eot;
+        document.getElementById('bar-ect').style.width = `${Math.min((ect / 120) * 100, 100)}%`;
+
+        const badgeTemp = document.getElementById('badge-temp-status');
+        if (ect > 105) {
+          badgeTemp.innerText = 'CRÍTICO';
+          badgeTemp.className = 'text-[10px] font-mono text-rose-400 bg-rose-950/60 border border-rose-500/40 px-1.5 py-0.5 rounded';
+        } else {
+          badgeTemp.innerText = 'NOMINAL';
+          badgeTemp.className = 'text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded';
+        }
+
+        // 4. Simulação Lambda / AFR & Eficiência Volumétrica
+        let lambda = 0.98 + (Math.random() * 0.08 - 0.04);
+        if (rpm > 4500) lambda = 0.84 + (Math.random() * 0.04); // Mistura rica em WOT
+        document.getElementById('val-lambda').innerText = lambda.toFixed(2);
+
+        const ve = Math.min(105, Math.floor((rpm / 7000) * 85 + (boost > 0 ? boost * 15 : 0)));
+        document.getElementById('val-ve').innerText = `${ve}%`;
+
+        // Indicador de ponto Lambda (0.80 a 1.20)
+        const lambdaPos = Math.max(0, Math.min(100, ((lambda - 0.80) / 0.40) * 100));
+        document.getElementById('lambda-pointer').style.left = `${lambdaPos}%`;
+
+        const badgeAfr = document.getElementById('badge-afr');
+        if (lambda < 0.90) {
+          badgeAfr.innerText = 'MISTURA RICA (POWER)';
+          badgeAfr.className = 'text-[10px] font-mono text-amber-400 bg-amber-950/50 border border-amber-500/40 px-1.5 py-0.5 rounded';
+        } else if (lambda > 1.05) {
+          badgeAfr.innerText = 'MISTURA POBRE (LEAN)';
+          badgeAfr.className = 'text-[10px] font-mono text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 px-1.5 py-0.5 rounded';
+        } else {
+          badgeAfr.innerText = 'ESTEQUIOMÉTRICO';
+          badgeAfr.className = 'text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700';
+        }
+
+        // Tensão de bateria aleatória (13.7 a 14.1V)
+        const vBat = (13.8 + (Math.random() * 0.3 - 0.15)).toFixed(1);
+        document.getElementById('ecu-voltage').innerText = `${vBat}V`;
+
+        // Latência CAN
+        const lat = Math.floor(12 + Math.random() * 6);
+        document.getElementById('link-latency').innerText = `${lat}ms`;
+
+      }, 1000);
+    }
+
+    // VARREDURA DE DIAGNÓSTICO (SCAN DTCs)
+    function scanDTCs() {
+      if (!state.connected) {
+        alert('Aviso: Módulo desconectado. Conecte à ECU antes de executar a varredura de DTCs.');
+        return;
+      }
+
+      const spinner = document.getElementById('scan-spinner');
+      const btnText = document.getElementById('btn-scan-text');
+      spinner.classList.remove('hidden');
+      btnText.innerText = 'VARRENDO MEMÓRIA DTC...';
+      logCAN('Enviando PID Mode 03 (Request Emission-Related DTCs)...', 'text-cyan-300');
+
+      setTimeout(() => {
+        spinner.classList.add('hidden');
+        btnText.innerText = '🔍 INICIAR VARREDURA (SCAN)';
+
+        // Sortear 1 ou 2 falhas da lista para simular achados
+        const foundCount = Math.floor(1 + Math.random() * 2);
+        const shuffled = [...DTC_DATABASE].sort(() => 0.5 - Math.random());
+        const newDTCs = shuffled.slice(0, foundCount);
+
+        newDTCs.forEach(dtc => {
+          if (!state.dtcs.some(d => d.code === dtc.code)) {
+            const now = new Date();
+            const time = now.toTimeString().split(' ')[0];
+            state.dtcs.push({ ...dtc, timestamp: time });
+            logCAN(`FALHA DETECTADA: [${dtc.code}] - ${dtc.desc}`, dtc.severity === 'critical' ? 'text-rose-400 font-bold' : 'text-amber-400');
+          }
+        });
+
+        renderDTCTable();
+      }, 1200);
+    }
+
+    // LIMPAR ERROS DA ECU (MODE 04 CLEAR DTCs)
+    function clearDTCs() {
+      if (!state.connected && state.dtcs.length === 0) {
+        alert('Nenhum código presente para limpeza.');
+        return;
+      }
+
+      logCAN('Enviando PID Mode 04 (Clear Diagnostic Information & MIL)...', 'text-amber-300');
+      state.dtcs = [];
+      renderDTCTable();
+      logCAN('Buffer de DTCs da ECU limpo com sucesso. Lâmpada de anomalia (MIL) apagada.', 'text-emerald-400');
+    }
+
+    // RENDERIZAR TABELA DE DTCs
+    function renderDTCTable() {
+      const tbody = document.getElementById('dtc-table-body');
+      const counter = document.getElementById('dtc-counter');
+      counter.innerText = `${state.dtcs.length} FALHAS`;
+
+      if (state.dtcs.length === 0) {
+        tbody.innerHTML = `
+          <tr id="row-empty">
+            <td colspan="6" class="text-center py-8 text-slate-500 font-mono italic">
+              Nenhuma falha ativa registrada no buffer da ECU. Conecte o módulo e execute uma varredura.
+            </td>
+          </tr>
+        `;
+        counter.className = 'text-xs font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold ml-2';
+        return;
+      }
+
+      counter.className = 'text-xs font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold ml-2';
+      tbody.innerHTML = '';
+
+      state.dtcs.forEach((dtc, idx) => {
+        const isCrit = dtc.severity === 'critical';
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition-colors border-b border-slate-800/60';
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 text-slate-400">${dtc.timestamp}</td>
+          <td class="py-2.5 px-3 font-bold ${isCrit ? 'text-rose-400' : 'text-amber-400'}">${dtc.code}</td>
+          <td class="py-2.5 px-3 text-slate-300">${dtc.system}</td>
+          <td class="py-2.5 px-3 text-slate-300">${dtc.desc}</td>
+          <td class="py-2.5 px-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isCrit ? 'bg-rose-950 text-rose-300 border border-rose-500/50' : 'bg-amber-950 text-amber-300 border border-amber-500/50'}">
+              ${isCrit ? 'CRÍTICA' : 'PENDENTE'}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-right">
+            <button onclick="removeSingleDTC(${idx})" class="text-slate-500 hover:text-rose-400 transition-colors">✕ Remover</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // REMOVER FALHA ESPECÍFICA
+    function removeSingleDTC(index) {
+      const removed = state.dtcs.splice(index, 1)[0];
+      logCAN(`Código [${removed.code}] removido individualmente da lista local.`, 'text-slate-400');
+      renderDTCTable();
+    }
+
+    // EXPORTAR LOG .CSV
+    function exportLogCSV() {
+      if (state.dtcs.length === 0) {
+        alert('O buffer de diagnósticos está vazio. Execute um Scan primeiro.');
+        return;
+      }
+
+      let csv = 'Horario,Codigo_DTC,Subsistema,Descricao,Severidade\n';
+      state.dtcs.forEach(d => {
+        csv += `"${d.timestamp}","${d.code}","${d.system}","${d.desc}","${d.severity}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ecu_diagnostic_log_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      logCAN('Arquivo de log de diagnósticos exportado (.CSV).', 'text-cyan-300');
+    }
+  </script>
+</body>
+</html>
